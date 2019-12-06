@@ -24,208 +24,276 @@
    'boolean_or
    'boolean_not
    'boolean_=
-   'string_=
-   'string_take
-   'string_drop
+  ; 'string_=
+  ; 'string_take
+  ; 'string_drop
    'string_reverse
    'string_concat
    'string_length
    'string_includes?
    'close
-   0
-   1
-   true
+   'char_dup
+   'char_empty?
+   'char_flip_case
+   'string_decompose
+   'string_concat_char
+  ; 'integer_range
+  ; 0
+  ; 1
+
+  ; true
    false
    ""
-   "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-   "A"
-   "C"
-   "G"
-   "T"))
+  ; "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  ; "A"
+  ; "C"
+  ; "G"
+  ; "T"
+   ))
 
-(def opens ; number of blocks opened by instructions (default = 0)
-  {'exec_dup 1
-   'exec_if 2})
+  (def opens ; number of blocks opened by instructions (default = 0)
+    {'exec_dup 1
+     'exec_if 2})
 
 ;;;;;;;;;
 ;; Utilities
+  
+  (def empty-push-state
+    {:exec '()
+     :integer '()
+     :string '("")
+     :boolean '()
+     :char '()
+     :input {}})
 
-(def empty-push-state
+(def empty-string-push-state
   {:exec '()
    :integer '()
    :string '()
    :boolean '()
+   :char '()
    :input {}})
 
-(defn abs
-  "Absolute value."
-  [x]
-  (if (neg? x)
-    (- x)
-    x))
+  (defn abs
+    "Absolute value."
+    [x]
+    (if (neg? x)
+      (- x)
+      x))
 
-(defn not-lazy
-  "Returns lst if it is not a list, or a non-lazy version of lst if it is."
-  [lst]
-  (if (seq? lst)
-    (apply list lst)
-    lst))
+  (defn not-lazy
+    "Returns lst if it is not a list, or a non-lazy version of lst if it is."
+    [lst]
+    (if (seq? lst)
+      (apply list lst)
+      lst))
 
-(defn push-to-stack
-  "Pushes item onto stack in state"
-  [state stack item]
-  (update state stack conj item))
+  (defn push-to-stack
+    "Pushes item onto stack in state"
+    [state stack item]
+    (update state stack conj item))
 
-(defn pop-stack
-  "Removes top item of stack."
-  [state stack]
-  (update state stack rest))
+  (defn pop-stack
+    "Removes top item of stack."
+    [state stack]
+    (update state stack rest))
 
-(defn peek-stack
-  "Returns top item on a stack."
-  [state stack]
-  (if (empty? (get state stack))
-    :no-stack-item
-    (first (get state stack))))
+  (defn peek-stack
+    "Returns top item on a stack."
+    [state stack]
+    (if (empty? (get state stack))
+      :no-stack-item
+      (first (get state stack))))
 
-(defn empty-stack?
-  "Returns true if the stack is empty."
-  [state stack]
-  (empty? (get state stack)))
+  (defn empty-stack?
+    "Returns true if the stack is empty."
+    [state stack]
+    (empty? (get state stack)))
 
-(defn get-args-from-stacks
-  "Takes a state and a list of stacks to take args from. If there are enough args
+  (defn get-args-from-stacks
+    "Takes a state and a list of stacks to take args from. If there are enough args
   on each of the desired stacks, returns a map of the form {:state :args}, where
   :state is the new state and :args is a list of args from the stacks. If there
   aren't enough args on the stacks, returns :not-enough-args."
-  [state stacks]
-  (loop [state state
-         stacks (reverse stacks)
-         args '()]
-    (if (empty? stacks)
-      {:state state :args args}
-      (let [stack (first stacks)]
-        (if (empty-stack? state stack)
-          :not-enough-args
-          (recur (pop-stack state stack)
-                 (rest stacks)
-                 (conj args (peek-stack state stack))))))))
+    [state stacks]
+    (loop [state state
+           stacks (reverse stacks)
+           args '()]
+      (if (empty? stacks)
+        {:state state :args args}
+        (let [stack (first stacks)]
+          (if (empty-stack? state stack)
+            :not-enough-args
+            (recur (pop-stack state stack)
+                   (rest stacks)
+                   (conj args (peek-stack state stack))))))))
 
-(defn make-push-instruction
-  "A utility function for making Push instructions. Takes a state, the function
+  (defn make-push-instruction
+    "A utility function for making Push instructions. Takes a state, the function
   to apply to the args, the stacks to take the args from, and the stack to return
   the result to. Applies the function to the args (taken from the stacks) and pushes
   the return value onto return-stack."
-  [state function arg-stacks return-stack]
-  (let [args-pop-result (get-args-from-stacks state arg-stacks)]
-    (if (= args-pop-result :not-enough-args)
-      state
-      (let [result (apply function (:args args-pop-result))
-            new-state (:state args-pop-result)]
-        (push-to-stack new-state return-stack result)))))
+    [state function arg-stacks return-stack]
+    (let [args-pop-result (get-args-from-stacks state arg-stacks)]
+      (if (= args-pop-result :not-enough-args)
+        state
+        (let [result (apply function (:args args-pop-result))
+              new-state (:state args-pop-result)]
+          (push-to-stack new-state return-stack result)))))
+  
+; adapted from https://gist.github.com/rboyd/5053955, but debugged and simplified.
+; TODO: figure out how to push/fork/something the better version.  Because searching
+; for a random string gen gave all kinds of nonsense.
+  (defn rand-str [len]
+    (apply str (repeatedly len #(char (+ (rand-int 26) (rand-nth [65 97]))))))
+
+(defn random-test-string 
+  "Generates a random string between 3 and 30 characters long,
+weighted towards 18, composed only of upper and lower case letters."
+  []
+  (rand-str [(+ (rand-int 1 11) (rand-int 1 11) (rand-int 1 11))]))
+
 
 ;;;;;;;;;
 ;; Instructions
+  
+  (defn in1
+    "Pushes the input labeled :in1 on the inputs map onto the :exec stack."
+    [state]
+    (push-to-stack state :exec (:in1 (:input state))))
 
-(defn in1
-  "Pushes the input labeled :in1 on the inputs map onto the :exec stack."
-  [state]
-  (push-to-stack state :exec (:in1 (:input state))))
+  (defn integer_+
+    [state]
+    (make-push-instruction state +' [:integer :integer] :integer))
 
-(defn integer_+
-  [state]
-  (make-push-instruction state +' [:integer :integer] :integer))
+  (defn integer_-
+    [state]
+    (make-push-instruction state -' [:integer :integer] :integer))
 
-(defn integer_-
-  [state]
-  (make-push-instruction state -' [:integer :integer] :integer))
+  (defn integer_*
+    [state]
+    (make-push-instruction state *' [:integer :integer] :integer))
 
-(defn integer_*
-  [state]
-  (make-push-instruction state *' [:integer :integer] :integer))
+  (defn integer_%
+    [state]
+    (make-push-instruction state
+                           (fn [int1 int2]
+                             (if (zero? int2)
+                               int1
+                               (quot int1 int2)))
+                           [:integer :integer]
+                           :integer))
 
-(defn integer_%
+  (defn integer_=
+    [state]
+    (make-push-instruction state = [:integer :integer] :boolean))
+
+  (defn exec_dup
+    [state]
+    (if (empty-stack? state :exec)
+      state
+      (push-to-stack state :exec (first (:exec state)))))
+
+  (defn exec_if
+    [state]
+    (make-push-instruction state
+                           #(if %1 %3 %2)
+                           [:boolean :exec :exec]
+                           :exec))
+
+  (defn boolean_and
+    [state]
+    (make-push-instruction state #(and %1 %2) [:boolean :boolean] :boolean))
+
+  (defn boolean_or
+    [state]
+    (make-push-instruction state #(or %1 %2) [:boolean :boolean] :boolean))
+
+  (defn boolean_not
+    [state]
+    (make-push-instruction state not [:boolean] :boolean))
+
+  (defn boolean_=
+    [state]
+    (make-push-instruction state = [:boolean :boolean] :boolean))
+
+  (defn string_=
+    [state]
+    (make-push-instruction state = [:string :string] :boolean))
+
+  (defn string_take
+    [state]
+    (make-push-instruction state
+                           #(apply str (take %1 %2))
+                           [:integer :string]
+                           :string))
+
+  (defn string_drop
+    [state]
+    (make-push-instruction state
+                           #(apply str (drop %1 %2))
+                           [:integer :string]
+                           :string))
+
+  (defn string_reverse
+    [state]
+    (make-push-instruction state
+                           #(apply str (reverse %))
+                           [:string]
+                           :string))
+
+  (defn string_concat
+    [state]
+    (make-push-instruction state
+                           #(apply str (concat %1 %2))
+                           [:string :string]
+                           :string))
+
+  (defn string_length
+    [state]
+    (make-push-instruction state count [:string] :integer))
+
+  (defn string_includes?
+    [state]
+    (make-push-instruction state clojure.string/includes? [:string :string] :boolean))
+
+  (defn string_get
+    [state]
+    (make-push-instruction state get [:string :integer] :char))
+
+  (defn string_concat_char
+    "Takes a character off of the character stack and appends it to the end 
+of a string on the string stack."
+    [state]
+    (make-push-instruction state str [:string :char] :string))
+
+  (defn string_decompose
+    [state]
+    (make-push-instruction state #(reverse (sequence %)) [:string] :exec))
+
+  (defn char_empty?
+    [state]
+    (make-push-instruction state #(empty-stack? state :char) [] :boolean)))
+
+(defn char_flip_case
   [state]
   (make-push-instruction state
-                         (fn [int1 int2]
-                           (if (zero? int2)
-                             int1
-                             (quot int1 int2)))
-                         [:integer :integer]
-                         :integer))
+                        #(if (Character/isUpperCase %)
+                                  (Character/toLowerCase %)
+                                  (Character/toUpperCase %))
+                         [:char] :char))
 
-(defn integer_=
+(defn char_dup
   [state]
-  (make-push-instruction state = [:integer :integer] :boolean))
-
-(defn exec_dup
-  [state]
-  (if (empty-stack? state :exec)
+  (if (empty-stack? state :char)
     state
-    (push-to-stack state :exec (first (:exec state)))))
+    (push-to-stack state :char (first (:char state)))))
 
-(defn exec_if
+(defn integer_range
   [state]
-  (make-push-instruction state
-                         #(if %1 %3 %2)
-                         [:boolean :exec :exec]
-                         :exec))
-
-(defn boolean_and
-  [state]
-  (make-push-instruction state #(and %1 %2) [:boolean :boolean] :boolean))
-
-(defn boolean_or
-  [state]
-  (make-push-instruction state #(or %1 %2) [:boolean :boolean] :boolean))
-
-(defn boolean_not
-  [state]
-  (make-push-instruction state not [:boolean] :boolean))
-
-(defn boolean_=
-  [state]
-  (make-push-instruction state = [:boolean :boolean] :boolean))
-
-(defn string_=
-  [state]
-  (make-push-instruction state = [:string :string] :boolean))
-
-(defn string_take
-  [state]
-  (make-push-instruction state
-                         #(apply str (take %1 %2))
-                         [:integer :string]
-                         :string))
-
-(defn string_drop
-  [state]
-  (make-push-instruction state
-                         #(apply str (drop %1 %2))
-                         [:integer :string]
-                         :string))
-
-(defn string_reverse
-  [state]
-  (make-push-instruction state
-                         #(apply str (reverse %))
-                         [:string]
-                         :string))
-
-(defn string_concat
-  [state]
-  (make-push-instruction state
-                         #(apply str (concat %1 %2))
-                         [:string :string]
-                         :string))
-
-(defn string_length
-  [state]
-  (make-push-instruction state count [:string] :integer))
-
-(defn string_includes?
-  [state]
-  (make-push-instruction state clojure.string/includes? [:string :string] :boolean))
+  nil)
+; Takes two integers and pushes (to exec stack) range between them (reversed?)
+; or range from 0 to single integer?
 
 ;;;;;;;;;
 ;; Interpreter
@@ -247,6 +315,9 @@
       ;
       (string? first-instruction)
       (push-to-stack popped-state :string first-instruction)
+      ;
+      (char? first-instruction)
+      (push-to-stack popped-state :char first-instruction)
       ;
       (seq? first-instruction)
       (update popped-state :exec #(concat %2 %1) first-instruction)
@@ -429,6 +500,10 @@
      x
      3))
 
+(defn target-function-lower-case
+  [x]
+  (clojure.string/lower-case x))
+
 (defn regression-error-function
   "Finds the behaviors and errors of the individual."
   [argmap individual]
@@ -453,6 +528,10 @@
            :behaviors outputs
            :errors errors
            :total-error (apply +' errors))))
+
+(defn random-letter-string
+  "Generates a random string made of only upper and lower case letters."
+  )
 
 ;;;;;;;;;
 ;; String classification
