@@ -13,11 +13,11 @@
 (def default-instructions
   (list
    'in1
-   'integer_+
-   'integer_-
-   'integer_*
-   'integer_%
-   'integer_=
+  ; 'integer_+
+  ; 'integer_-
+  ; 'integer_*
+  ; 'integer_%
+  ; 'integer_=
    'exec_dup
    'exec_if
    'boolean_and
@@ -61,7 +61,7 @@
   (def empty-push-state
     {:exec '()
      :integer '()
-     :string '("")
+     :string '()
      :boolean '()
      :char '()
      :input {}})
@@ -69,7 +69,7 @@
 (def empty-string-push-state
   {:exec '()
    :integer '()
-   :string '()
+   :string '("")
    :boolean '()
    :char '()
    :input {}})
@@ -148,10 +148,73 @@
     (apply str (repeatedly len #(char (+ (rand-int 26) (rand-nth [65 97]))))))
 
 (defn random-test-string 
-  "Generates a random string between 3 and 30 characters long,
+  "Generates a random string between 3 and 30 letters long,
 weighted towards 18, composed only of upper and lower case letters."
   []
-  (rand-str [(+ (rand-int 1 11) (rand-int 1 11) (rand-int 1 11))]))
+  (rand-str [(+ 3 (rand-int 10) (rand-int 10) (rand-int 10))]))
+
+(defn compute-next-row
+  "computes the next row using the prev-row current-element and the other seq"
+  [prev-row current-element other-seq pred]
+  (reduce
+   (fn [row [diagonal above other-element]]
+     (let [update-val (if (pred other-element current-element)
+                         ;; if the elements are deemed equivalent according to the predicate
+                         ;; pred, then no change has taken place to the string, so we are
+                         ;; going to set it the same value as diagonal (which is the previous edit-distance)
+                        diagonal
+                         ;; in the case where the elements are not considered equivalent, then we are going
+                         ;; to figure out if its a substitution (then there is a change of 1 from the previous
+                         ;; edit distance) thus the value is diagonal + 1 or if its a deletion, then the value
+                         ;; is present in the columns, but not in the rows, the edit distance is the edit-distance
+                         ;; of last of row + 1 (since we will be using vectors, peek is more efficient)
+                         ;; or it could be a case of insertion, then the value is above+1, and we chose
+                         ;; the minimum of the three
+                        (inc (min diagonal above (peek row))))]
+
+       (conj row update-val)))
+    ;; we need to initialize the reduce function with the value of a row, since we are
+    ;; constructing this row from the previous one, the row is a vector of 1 element which
+    ;; consists of 1 + the first element in the previous row (edit distance between the prefix so far
+    ;; and an empty string)
+   [(inc (first prev-row))]
+    ;; for the reduction to go over, we need to provide it with three values, the diagonal
+    ;; which is the same as prev-row because it starts from 0, the above, which is the next element
+    ;; from the list and finally the element from the other sequence itself.
+   (map vector prev-row (next prev-row) other-seq)))
+
+(defn levenshtein-distance
+  "Levenshtein Distance - http://en.wikipedia.org/wiki/Levenshtein_distance
+     In information theory and computer science, the Levenshtein distance is a
+     metric for measuring the amount of difference between two sequences. This
+     is a functional implementation of the levenshtein edit
+     distance with as little mutability as possible.
+     Still maintains the O(n*m) guarantee."
+  [a b & {p :predicate  :or {p =}}]
+  (cond
+    (empty? a) (count b)
+    (empty? b) (count a)
+    :else (peek
+           (reduce
+              ;; we use a simple reduction to convert the previous row into the next-row  using the
+              ;; compute-next-row which takes a current element, the previous-row computed so far
+              ;; and the predicate to compare for equality.
+            (fn [prev-row current-element]
+              (compute-next-row prev-row current-element b p))
+              ;; we need to initialize the prev-row with the edit distance between the various prefixes of
+              ;; b and the empty string.
+            (range (inc (count b)))
+            a))))
+
+(defn modified-levenshtein
+  "A modification of levenshtein which inflicts an additional penalty
+for the addition of entirely new characters or length differences.
+May not be necessary."
+  [a b]
+  (+ (levenshtein-distance a b)
+     (abs (- (count a) (count b)))
+     0 ;count number of characters in the output that aren't in the input, ignoring case
+     ))
 
 
 ;;;;;;;;;
@@ -273,7 +336,7 @@ of a string on the string stack."
 
   (defn char_empty?
     [state]
-    (make-push-instruction state #(empty-stack? state :char) [] :boolean)))
+    (make-push-instruction state #(empty-stack? state :char) [] :boolean))
 
 (defn char_flip_case
   [state]
@@ -514,7 +577,7 @@ of a string on the string stack."
                        (peek-stack
                         (interpret-program
                          program
-                         (assoc empty-push-state :input {:in1 input})
+                         (assoc empty-string-push-state :input {:in1 input})
                          (:step-limit argmap))
                         :integer))
                      inputs)
@@ -529,9 +592,31 @@ of a string on the string stack."
            :errors errors
            :total-error (apply +' errors))))
 
-(defn random-letter-string
-  "Generates a random string made of only upper and lower case letters."
-  )
+(defn lower-case-error-function
+  "Uses regression to determine the error of lower-case."
+  [argmap individual]
+    (let [program (push-from-plushy (:plushy individual))
+        inputs (conj ["UPPER" "lower" "Ab" "cd" "AE" "cdE" "O" "caMel" "hIj" "AAA"]
+                     (repeatedly 15 random-test-string))
+        correct-outputs (map clojure.string/lower-case inputs)
+        outputs (map (fn [input]
+                       (peek-stack
+                        (interpret-program
+                         program
+                         (assoc empty-string-push-state :input {:in1 input})
+                         (:step-limit argmap))
+                        :string))
+                     inputs)
+        errors (map (fn [correct-output output]
+                      (if (= output :no-stack-item)
+                        1000000
+                        (levenshtein-distance correct-output output)))
+                    correct-outputs
+                    outputs)]
+    (assoc individual
+           :behaviors outputs
+           :errors errors
+           :total-error (apply +' errors))))
 
 ;;;;;;;;;
 ;; String classification
