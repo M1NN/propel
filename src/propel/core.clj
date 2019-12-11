@@ -34,14 +34,15 @@
    'close
    'char_dup
    'char_empty?
+   'char_upper?
    'char_flip_case
    'string_decompose
    'string_concat_char
   ; 'integer_range
   ; 0
   ; 1
-
-  ; true
+   
+   true
    false
    ""
   ; "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -151,7 +152,7 @@
   "Generates a random string between 3 and 30 letters long,
 weighted towards 18, composed only of upper and lower case letters."
   []
-  (rand-str [(+ 3 (rand-int 10) (rand-int 10) (rand-int 10))]))
+  (rand-str (+ 3 (rand-int 10) (rand-int 10) (rand-int 10))))
 
 (defn compute-next-row
   "computes the next row using the prev-row current-element and the other seq"
@@ -338,6 +339,10 @@ of a string on the string stack."
     [state]
     (make-push-instruction state #(empty-stack? state :char) [] :boolean))
 
+(defn char_upper?
+  [state]
+  (make-push-instruction state #(Character/isUpperCase %) [:char] :boolean)) ;Java function needs wrapper
+
 (defn char_flip_case
   [state]
   (make-push-instruction state
@@ -354,7 +359,7 @@ of a string on the string stack."
 
 (defn integer_range
   [state]
-  nil)
+  (make-push-instruction state #(range %) [:integer] :exec))
 ; Takes two integers and pushes (to exec stack) range between them (reversed?)
 ; or range from 0 to single integer?
 
@@ -592,12 +597,17 @@ of a string on the string stack."
            :errors errors
            :total-error (apply +' errors))))
 
+(def pregen-random-string 
+  (repeatedly 15 random-test-string))
+
 (defn lower-case-error-function
   "Uses regression to determine the error of lower-case."
   [argmap individual]
     (let [program (push-from-plushy (:plushy individual))
-        inputs (conj ["UPPER" "lower" "Ab" "cd" "AE" "cdE" "O" "caMel" "hIj" "AAA"]
-                     (repeatedly 15 random-test-string))
+        inputs (into ["UPPER" "lower" "Ab" "cd" "AE" "cdE" "O" "caMel" "hIj" "AAA" "a" "A" "b" "B" "c" "C" "d" "E" ]
+                     ;(repeatedly 15 random-test-string)
+                     pregen-random-string
+                     )
         correct-outputs (map clojure.string/lower-case inputs)
         outputs (map (fn [input]
                        (peek-stack
