@@ -18,30 +18,34 @@
   ; 'integer_*
   ; 'integer_%
   ; 'integer_=
+   'integer_empty?
    'exec_dup
    'exec_if
+   'exec_while 
    'boolean_and
    'boolean_or
    'boolean_not
    'boolean_=
   ; 'string_=
-  ; 'string_take
-  ; 'string_drop
+   'string_take
+   'string_drop
    'string_reverse
    'string_concat
    'string_length
-   'string_includes?
+  ; 'string_includes?
+  ; 'string_decompose
+  ; 'string_concat_char
+   'string_get_char
+   'string_flip_pos
+  ;'string_lowercase
    'close
    'char_dup
    'char_empty?
    'char_upper?
    'char_flip_case
-   'string_decompose
-   'string_concat_char
-  ; 'integer_range
-  ; 0
-  ; 1
-   
+   'integer_range
+   0
+   1
    true
    false
    ""
@@ -217,6 +221,21 @@ May not be necessary."
      0 ;count number of characters in the output that aren't in the input, ignoring case
      ))
 
+(defn flip-case [^Character c]
+  (if (Character/isUpperCase c)
+    (Character/toLowerCase c)
+    (Character/toUpperCase c)))
+
+(defn safe-flip-pos [s p]
+  (if (not (and (string? s) (number? p)))
+    (throw (AssertionError. (clojure.string/escape "Safe-flip-pos recieved illegal arguments 1 and 2" {\1 s, \2 p})))
+    (if (or (>= p (count s)) (< p 0))
+      s
+      (str (concat
+            (take p s)
+            [(flip-case (get s p))]
+            (drop (+ p 1) s))))))
+
 
 ;;;;;;;;;
 ;; Instructions
@@ -281,6 +300,18 @@ May not be necessary."
     [state]
     (make-push-instruction state = [:boolean :boolean] :boolean))
 
+(defn
+  exec_while
+  [state]
+    (if (empty? (:exec state))
+      state
+      (if (empty? (:boolean state))
+        (pop-stack state :exec)
+        (if (not (peek-stack state :boolean))
+          (pop-stack (pop-stack state :boolean) :exec)
+          (let [block (peek-stack state :exec)]
+            (pop-stack (push-to-stack (push-to-stack state :exec 'exec_while) :exec block) :boolean ))))))
+
   (defn string_=
     [state]
     (make-push-instruction state = [:string :string] :boolean))
@@ -317,13 +348,9 @@ May not be necessary."
     [state]
     (make-push-instruction state count [:string] :integer))
 
-  (defn string_includes?
-    [state]
-    (make-push-instruction state clojure.string/includes? [:string :string] :boolean))
-
-  (defn string_get
-    [state]
-    (make-push-instruction state get [:string :integer] :char))
+;  (defn string_includes?
+;    [state]
+;    (make-push-instruction state (fn clojure.string/includes?) [:string :string] :boolean))
 
   (defn string_concat_char
     "Takes a character off of the character stack and appends it to the end 
@@ -335,21 +362,42 @@ of a string on the string stack."
     [state]
     (make-push-instruction state #(reverse (sequence %)) [:string] :exec))
 
+(defn string_lowercase
+  [state]
+  (make-push-instruction state #(clojure.string/lower-case %) [:string] :string))
+
+(defn string_get_char
+  [state]
+  (let [top-string (peek-stack state :string)
+        top-int (peek-stack state :int)]
+  (if (or (= top-int :no-stack-item) (= top-string :no-stack-item) (>= top-int (count top-string)) (< top-int 0))
+    (if (or (empty? (state :string)) (empty? (state :integer)))
+      state
+      (pop-stack (pop-stack state :string) :integer))
+    (make-push-instruction state get [:string :integer] :char))))
+
+(defn string_flip_pos
+  [state]
+  (make-push-instruction state safe-flip-pos [:string :integer] :string))
+
   (defn char_empty?
     [state]
     (make-push-instruction state #(empty-stack? state :char) [] :boolean))
+  
+(defn integer_empty?
+  [state]
+  (make-push-instruction state #(empty-stack? state :integer) [] :boolean))
+
 
 (defn char_upper?
   [state]
   (make-push-instruction state #(Character/isUpperCase %) [:char] :boolean)) ;Java function needs wrapper
 
+
+
 (defn char_flip_case
   [state]
-  (make-push-instruction state
-                        #(if (Character/isUpperCase %)
-                                  (Character/toLowerCase %)
-                                  (Character/toUpperCase %))
-                         [:char] :char))
+  (make-push-instruction state flip-case [:char] :char))
 
 (defn char_dup
   [state]
