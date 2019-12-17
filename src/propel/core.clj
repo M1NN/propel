@@ -19,33 +19,37 @@
   ; 'integer_%
   ; 'integer_=
    'integer_empty?
+   'integer_dup
    'exec_dup
    'exec_if
    'exec_while 
-   'boolean_and
-   'boolean_or
+  ; 'boolean_and
+  ; 'boolean_or
    'boolean_not
-   'boolean_=
+  ; 'boolean_=
   ; 'string_=
    'string_take
    'string_drop
-   'string_reverse
-   'string_concat
+  ; 'string_reverse
+  ; 'string_concat
    'string_length
+   'string_dup
   ; 'string_includes?
   ; 'string_decompose
   ; 'string_concat_char
-   'string_get_char
+  ; 'string_get_char
    'string_flip_pos
+   'string_upper_at_pos?
+  ; 'string_pos_to_lower
   ;'string_lowercase
    'close
-   'char_dup
-   'char_empty?
-   'char_upper?
-   'char_flip_case
+;   'char_dup
+;   'char_empty?
+ ;  'char_upper?
+ ;  'char_flip_case
    'integer_range
-   0
-   1
+;   0
+;   1
    true
    false
    ""
@@ -227,15 +231,31 @@ May not be necessary."
     (Character/toUpperCase c)))
 
 (defn safe-flip-pos [s p]
-  (if (not (and (string? s) (number? p)))
-    (throw (AssertionError. (clojure.string/escape "Safe-flip-pos recieved illegal arguments 1 and 2" {\1 s, \2 p})))
+  ;(if (not (and (string? s) (number? p)))
+    ;(throw (AssertionError. (clojure.string/escape "Safe-flip-pos recieved illegal arguments 1 and 2" {\1 s, \2 p})))
     (if (or (>= p (count s)) (< p 0))
       s
-      (str (concat
-            (take p s)
-            [(flip-case (get s p))]
-            (drop (+ p 1) s))))))
+      (apply str 
+             (concat
+              (take p s)
+              [(flip-case (get s p))]
+              (drop (+ p 1) s)))))
 
+(defn pos-to-lower
+  [s p]
+  (if (or (>= p (count s)) (< p 0))
+    s
+    (apply str 
+           (concat 
+            (take p s)
+            [(Character/toLowerCase (get s p))]
+            (drop (+ p 1) s)))))
+
+(defn upper-at-pos?
+  [s p]
+  (if (or (>= p (count s)) (< p 0))
+    false
+    (Character/isUpperCase (get s p))))
 
 ;;;;;;;;;
 ;; Instructions
@@ -270,6 +290,12 @@ May not be necessary."
   (defn integer_=
     [state]
     (make-push-instruction state = [:integer :integer] :boolean))
+
+(defn integer_dup
+  [state]
+  (if (empty-stack? state :integer)
+    state
+    (push-to-stack state :integer (first (:integer state)))))
 
   (defn exec_dup
     [state]
@@ -371,7 +397,7 @@ of a string on the string stack."
   (let [top-string (peek-stack state :string)
         top-int (peek-stack state :int)]
   (if (or (= top-int :no-stack-item) (= top-string :no-stack-item) (>= top-int (count top-string)) (< top-int 0))
-    (if (or (empty? (state :string)) (empty? (state :integer)))
+    (if (or (= top-int :no-stack-item) (= top-string :no-stack-item))
       state
       (pop-stack (pop-stack state :string) :integer))
     (make-push-instruction state get [:string :integer] :char))))
@@ -379,6 +405,20 @@ of a string on the string stack."
 (defn string_flip_pos
   [state]
   (make-push-instruction state safe-flip-pos [:string :integer] :string))
+
+(defn string_pos_to_lower
+  [state]
+  (make-push-instruction state pos-to-lower [:string :integer] :string))
+
+(defn string_upper_at_pos?
+  [state]
+  (make-push-instruction state upper-at-pos? [:string :integer] :boolean))
+
+(defn string_dup
+  [state]
+  (if (empty-stack? state :string)
+    state
+    (push-to-stack state :string (first (:string state)))))
 
   (defn char_empty?
     [state]
@@ -646,13 +686,13 @@ of a string on the string stack."
            :total-error (apply +' errors))))
 
 (def pregen-random-string 
-  (repeatedly 15 random-test-string))
+  (repeatedly 20 random-test-string))
 
 (defn lower-case-error-function
   "Uses regression to determine the error of lower-case."
   [argmap individual]
     (let [program (push-from-plushy (:plushy individual))
-        inputs (into ["UPPER" "lower" "Ab" "cd" "AE" "cdE" "O" "caMel" "hIj" "AAA" "a" "A" "b" "B" "c" "C" "d" "E" ]
+        inputs (into ["UPPER" "lower" "Ab" "cd" "AE" "cdE" "O" "caMel" "hIj" "AAA" "a" "A" "b" "bUMpY"]
                      ;(repeatedly 15 random-test-string)
                      pregen-random-string
                      )
