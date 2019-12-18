@@ -23,6 +23,7 @@ Here is a list of all functions and constants we gave our program:
 - true
 - false
 - "" (empty string)
+
 String_flip_pos is a function that takes a string and integer and returns a string where the case of a letter has been flipped at the given integer position. If the position is out of range we just return the inputted string.
 String_upper_at_pos? is a function that takes a string and an integer and returns true if there is a character at the given position which is uppercase, false otherwise (if the character is lowercase or the integer is out of range).
 Integer_range takes an integer and returns a list of integers from 0 to the input.  Due to the way in which propel handles lists, the integers are placed on the integer stack such that they are accessed in reverse order; we felt that, while slightly unintuitive to human viewers, this would not interfere with the program's evolution in any way and so we elected not to change it.
